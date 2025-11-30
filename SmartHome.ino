@@ -15,16 +15,12 @@
 
 // ==================== FIREBASE ====================
 #include <Firebase_ESP_Client.h>
-#include "addons/TokenHelper.h"
-#include "addons/RTDBHelper.h"
-
 FirebaseData fbdo;
 FirebaseAuth authfb;
 FirebaseConfig configfb;
 
-#define API_KEY       "AIzaSyBoMsziybAUvBQUfKrmyXqB-1L8y6V8rC4"
-#define DATABASE_URL  "https://cobakamar-8af3f-default-rtdb.asia-southeast1.firebasedatabase.app",
-
+#define API_KEY "AIzaSyBoMsziybAUvBQUfKrmyXqB-1L8y6V8rC4"
+#define DATABASE_URL "https://cobakamar-8af3f-default-rtdb.asia-southeast1.firebasedatabase.app"
 // =================================================
 
 char auth[] = BLYNK_AUTH_TOKEN;
@@ -47,18 +43,16 @@ DHT dht(DHTPIN, DHTTYPE);
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
 // ===== Relay & Button =====
-const int relayPins[4]  = {18, 19, 23, 5};
-const int buttonPins[4] = {26, 25, 33, 32};
-int relayState[4]       = {LOW, LOW, LOW, LOW};
-int lastButtonState[4]  = {HIGH, HIGH, HIGH, HIGH};
-unsigned long lastDebounceTime[4] = {0, 0, 0, 0};
+const int relayPins[4] = { 18, 19, 23, 5 };
+const int buttonPins[4] = { 26, 25, 33, 32 };
+int relayState[4] = { LOW, LOW, LOW, LOW };
+int lastButtonState[4] = { HIGH, HIGH, HIGH, HIGH };
+unsigned long lastDebounceTime[4] = { 0, 0, 0, 0 };
 const unsigned long debounceDelay = 200;
 
-// ===== Lamp Names =====
-const int vPins[4] = {V1, V2, V3, V4};
-const char* lampuNames[4] = {"Lampu 1", "Fan", "Lampu 3", "Lampu 4"};
+const int vPins[4] = { V1, V2, V3, V4 };
+const char* lampuNames[4] = { "Lampu 1", "Fan", "Lampu 3", "Lampu 4" };
 
-// === Relay KEY Firebase ===
 const char* firebaseRelayKeys[4] = {
   "lamp1",
   "fan",
@@ -67,7 +61,7 @@ const char* firebaseRelayKeys[4] = {
 };
 
 // ===== LCD Mode =====
-enum DisplayMode {LAMPU_STATUS, PZEM_DISPLAY, TEMPHUMID};
+enum DisplayMode { LAMPU_STATUS, PZEM_DISPLAY, TEMPHUMID };
 DisplayMode currentMode = PZEM_DISPLAY;
 unsigned long lastActivityTime = 0;
 unsigned long lastDisplaySwitch = 0;
@@ -76,21 +70,23 @@ const unsigned long displaySwitchTime = 5000;
 
 // ===== Sensor Variables =====
 float temperature = NAN;
-float humidity = NAN;
-float voltage = NAN, currentVal = NAN, power = NAN, energy = NAN;
-float frequency = NAN, pf = NAN;
+float humidity    = NAN;
+float voltage     = NAN;
+float currentVal  = NAN;
+float power       = NAN;
+float energy      = NAN;
+float frequency   = NAN;
+float pf          = NAN;
 
 // Forward declarations
-void setRelay(int id, int state, String source = "Unknown");
+void setRelay(int id, int state, String source);
 
-// =========================================================
-// ====== BLYNK CONNECT ======
+// ===================== BLYNK =====================
 BLYNK_CONNECTED() {
-  for (int i = 0; i < 4; i++) Blynk.syncVirtual(vPins[i]);
+  for (int i = 0; i < 4; i++)
+    Blynk.syncVirtual(vPins[i]);
 }
 
-// =========================================================
-// ====== BLYNK CONTROL ======
 BLYNK_WRITE_DEFAULT() {
   int pinIndex = request.pin - V1;
   if (pinIndex >= 0 && pinIndex < 4) {
@@ -98,16 +94,12 @@ BLYNK_WRITE_DEFAULT() {
   }
 }
 
-// =========================================================
-// ====== FUNGSI SET RELAY (sinkron Firebase + Blynk) ======
-void setRelay(int id, int state, String source){
-
+// ===================== RELAY =====================
+void setRelay(int id, int state, String source) {
   relayState[id] = state;
   digitalWrite(relayPins[id], state);
-
   Blynk.virtualWrite(vPins[id], state);
 
-  // =========== UPDATE FIREBASE YANG BENAR ===========
   String path = "kamar_ovan/";
   path += firebaseRelayKeys[id];
 
@@ -115,17 +107,16 @@ void setRelay(int id, int state, String source){
     Serial.print("Firebase setInt failed: ");
     Serial.println(fbdo.errorReason());
   }
-  // ==================================================
 
-  Serial.printf("%s %s (%s)\n", lampuNames[id], state ? "nyala" : "mati", source.c_str());
+  Serial.printf("%s %s (%s)\n",
+                lampuNames[id], state ? "nyala" : "mati", source.c_str());
 
   showLampStatus();
   currentMode = LAMPU_STATUS;
   lastActivityTime = millis();
 }
 
-// =========================================================
-// ===================== SETUP ==============================
+// ===================== SETUP =====================
 void setup() {
   Serial.begin(115200);
 
@@ -138,9 +129,9 @@ void setup() {
   lcd.init();
   lcd.backlight();
   lcd.clear();
-  lcd.setCursor(3,0); lcd.print("MONITORING AND");
-  lcd.setCursor(5,1); lcd.print("CONTROLLING");
-  lcd.setCursor(5,2); lcd.print("OVAN'S ROOM");
+  lcd.setCursor(3, 0); lcd.print("MONITORING AND");
+  lcd.setCursor(5, 1); lcd.print("CONTROLLING");
+  lcd.setCursor(5, 2); lcd.print("OVAN'S ROOM");
   delay(1500);
 
   dht.begin();
@@ -148,10 +139,23 @@ void setup() {
 
   Blynk.begin(auth, ssid, pass);
 
+  // ======== FIREBASE FIX FOR ANONYMOUS =========
   configfb.api_key = API_KEY;
   configfb.database_url = DATABASE_URL;
+  authfb.user.email = "";
+  authfb.user.password = "";
+
   Firebase.begin(&configfb, &authfb);
   Firebase.reconnectWiFi(true);
+  // ==============================================
+
+  Serial.println("Testing Firebase...");
+  if (Firebase.RTDB.setInt(&fbdo, "test/value", 123)) {
+    Serial.println("Firebase Write OK!");
+  } else {
+    Serial.print("Firebase Write FAILED: ");
+    Serial.println(fbdo.errorReason());
+  }
 
   timer.setInterval(2000L, updateSensors);
   timer.setInterval(5000L, sendPZEMData);
@@ -159,8 +163,7 @@ void setup() {
   timer.setInterval(3000L, firebaseReadRelay);
 }
 
-// =========================================================
-// ======================== LOOP ============================
+// ===================== LOOP =====================
 void loop() {
   Blynk.run();
   timer.run();
@@ -172,20 +175,28 @@ void loop() {
     showPZEMDataLCD();
   }
 
-  if (currentMode != LAMPU_STATUS && millis() - lastDisplaySwitch > displaySwitchTime) {
+  if (currentMode != LAMPU_STATUS &&
+      millis() - lastDisplaySwitch > displaySwitchTime) {
+
     currentMode = (currentMode == PZEM_DISPLAY) ? TEMPHUMID : PZEM_DISPLAY;
-    if (currentMode == TEMPHUMID) showTemperatureHumidity();
-    else showPZEMDataLCD();
+
+    if (currentMode == TEMPHUMID)
+      showTemperatureHumidity();
+    else
+      showPZEMDataLCD();
+
     lastDisplaySwitch = millis();
   }
 }
 
-// =========================================================
-// ====================== BUTTON ============================
+// ===================== BUTTON =====================
 void checkButtons() {
   for (int i = 0; i < 4; i++) {
     int reading = digitalRead(buttonPins[i]);
-    if (reading == LOW && lastButtonState[i] == HIGH && millis() - lastDebounceTime[i] > debounceDelay) {
+
+    if (reading == LOW && lastButtonState[i] == HIGH &&
+        millis() - lastDebounceTime[i] > debounceDelay) {
+
       lastDebounceTime[i] = millis();
       setRelay(i, !relayState[i], "Manual");
     }
@@ -193,20 +204,21 @@ void checkButtons() {
   }
 }
 
-// =========================================================
-// ======================= LCD ==============================
+// ===================== LCD =====================
 void showTemperatureHumidity() {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
 
   lcd.clear();
-  lcd.setCursor(0,0); lcd.print("Temperature :");
-  if (!isnan(t)) { lcd.setCursor(12,0); lcd.print(t,1); lcd.print("C"); }
-  else lcd.setCursor(12,0), lcd.print("--.-C");
+  lcd.setCursor(0, 0); lcd.print("Temperature :");
+  lcd.setCursor(12, 0);
+  if (!isnan(t)) lcd.print(t, 1), lcd.print("C");
+  else lcd.print("--.-C");
 
-  lcd.setCursor(0,2); lcd.print("Humidity    :");
-  if (!isnan(h)) { lcd.setCursor(12,2); lcd.print(h,1); lcd.print("%"); }
-  else lcd.setCursor(12,2), lcd.print("--.-%");
+  lcd.setCursor(0, 2); lcd.print("Humidity    :");
+  lcd.setCursor(12, 2);
+  if (!isnan(h)) lcd.print(h, 1), lcd.print("%");
+  else lcd.print("--.-%");
 
   if (!isnan(t)) Blynk.virtualWrite(V11, t);
   if (!isnan(h)) Blynk.virtualWrite(V12, h);
@@ -214,20 +226,20 @@ void showTemperatureHumidity() {
 
 void showPZEMDataLCD() {
   lcd.clear();
-  lcd.setCursor(0,0);
-  if (!isnan(voltage)) lcd.print("Voltage: "), lcd.print(voltage,1), lcd.print(" V");
+  lcd.setCursor(0, 0);
+  if (!isnan(voltage)) lcd.print("Voltage: "), lcd.print(voltage, 1), lcd.print(" V");
   else lcd.print("Voltage: --.- V");
 
-  lcd.setCursor(0,1);
-  if (!isnan(currentVal)) lcd.print("Current: "), lcd.print(currentVal,2), lcd.print(" A");
+  lcd.setCursor(0, 1);
+  if (!isnan(currentVal)) lcd.print("Current: "), lcd.print(currentVal, 2), lcd.print(" A");
   else lcd.print("Current: --.- A");
 
-  lcd.setCursor(0,2);
-  if (!isnan(power)) lcd.print("Power  : "), lcd.print(power,1), lcd.print(" W");
+  lcd.setCursor(0, 2);
+  if (!isnan(power)) lcd.print("Power  : "), lcd.print(power, 1), lcd.print(" W");
   else lcd.print("Power  : --.- W");
 
-  lcd.setCursor(0,3);
-  if (!isnan(energy)) lcd.print("Energy : "), lcd.print(energy,3), lcd.print(" kWh");
+  lcd.setCursor(0, 3);
+  if (!isnan(energy)) lcd.print("Energy : "), lcd.print(energy, 3), lcd.print(" kWh");
   else lcd.print("Energy : --.- kWh");
 }
 
@@ -241,16 +253,16 @@ void showLampStatus() {
   }
 }
 
-// =========================================================
-// ================== SENSOR UPDATE =========================
+// ===================== SENSOR UPDATE =====================
 void updateSensors() {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
+
   if (!isnan(t)) temperature = t;
   if (!isnan(h)) humidity = h;
 
-  if (!isnan(temperature)) Blynk.virtualWrite(V11, temperature);
-  if (!isnan(humidity)) Blynk.virtualWrite(V12, humidity);
+  Blynk.virtualWrite(V11, temperature);
+  Blynk.virtualWrite(V12, humidity);
 
   float v = pzem.voltage();
   float i = pzem.current();
@@ -268,56 +280,38 @@ void updateSensors() {
 }
 
 void sendPZEMData() {
-  if (!isnan(voltage)) Blynk.virtualWrite(V5, voltage);
-  if (!isnan(currentVal)) Blynk.virtualWrite(V6, currentVal);
-  if (!isnan(power))      Blynk.virtualWrite(V7, power);
-  if (!isnan(energy))     Blynk.virtualWrite(V8, energy);
-  if (!isnan(frequency))  Blynk.virtualWrite(V9, frequency);
-  if (!isnan(pf))         Blynk.virtualWrite(V10, pf);
+  Blynk.virtualWrite(V5, voltage);
+  Blynk.virtualWrite(V6, currentVal);
+  Blynk.virtualWrite(V7, power);
+  Blynk.virtualWrite(V8, energy);
+  Blynk.virtualWrite(V9, frequency);
+  Blynk.virtualWrite(V10, pf);
 }
 
-// =========================================================
-// ============ FIREBASE : KIRIM SENSOR 10 DETIK ============
+// ===================== FIREBASE SEND =====================
 void firebaseSensorSend() {
 
-  if (!isnan(temperature))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/dht22/suhu", temperature);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/dht22/suhu", temperature);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/dht22/kelembaban", humidity);
 
-  if (!isnan(humidity))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/dht22/kelembaban", humidity);
-
-  if (!isnan(voltage))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/voltage", voltage);
-
-  if (!isnan(currentVal))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/current", currentVal);
-
-  if (!isnan(power))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/power", power);
-
-  if (!isnan(energy))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/energy", energy);
-
-  if (!isnan(frequency))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/frequency", frequency);
-
-  if (!isnan(pf))
-    Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/pf", pf);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/voltage", voltage);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/current", currentVal);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/power", power);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/energy", energy);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/frequency", frequency);
+  Firebase.RTDB.setFloat(&fbdo, "kamar_ovan/pzem/pf", pf);
 }
 
-// =========================================================
-// ========= FIREBASE : BACA RELAY SETIAP 3 DETIK ===========
+// ===================== FIREBASE READ RELAY =====================
 void firebaseReadRelay() {
 
   for (int i = 0; i < 4; i++) {
-
-    int fbState = -1;
-
     String path = "kamar_ovan/";
     path += firebaseRelayKeys[i];
 
-    if (Firebase.RTDB.getInt(&fbdo, path.c_str(), &fbState)) {
+    if (Firebase.RTDB.getInt(&fbdo, path)) {
 
+      int fbState = fbdo.intData();
       int stateToApply = fbState ? 1 : 0;
 
       if (stateToApply != relayState[i]) {
